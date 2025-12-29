@@ -1,0 +1,21 @@
+# MapleStory Idle Bot Configuration
+# Copy this file to settings.yaml and customize as needed
+
+loglevel: info
+
+# ADB Connection
+adb:
+  host: "127.0.0.1"
+  port: 5555
+
+# Bot Options
+bot-option:
+  # Queue timeout in SECONDS (default: 30)
+  queue-timeout: 30
+  
+  # Quest choice: sleepywood | ludibrium
+  quest-choice: sleepywood
+  
+  # Random actions for anti-detection
+  random-jump: true
+

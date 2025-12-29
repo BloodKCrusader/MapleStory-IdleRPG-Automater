@@ -1,0 +1,25 @@
+# MapleStory Idle Bot - Dependencies
+# Install with: pip install -r requirements.txt
+
+# ADB Communication
+adb-shell>=0.4.4
+pure-python-adb>=0.3.0.dev0
+
+# Image Processing & Template Matching
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# Configuration
+PyYAML>=6.0
+
+# GUI
+customtkinter>=5.2.0
+
+# Logging & Utilities
+colorlog>=6.7.0
+python-dateutil>=2.8.2
+
+# Optional: For faster image processing
+# opencv-python-headless>=4.8.0  # Use instead of opencv-python for servers
+
