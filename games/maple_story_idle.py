@@ -40,7 +40,7 @@ class MapleStoryIdleBot:
     - in_queue: Waiting in queue
     - stop_queue: Cancel queue button
     - confirm: OK/Confirm (PRIORITY!)
-    - loading_screen, loading_screen2, loading_screen3, loading_screen4, loading_screen5, checking_player_info: Game loading
+    - loading_screen, loading_screen2, loading_screen3, loading_screen4, loading_screen5: Game loading
     - wave_1, wave_2, wave_3: In PQ (Sleepywood waves)
     - clear: PQ complete indicator (triggers PQ finish)
     """
@@ -213,7 +213,7 @@ class MapleStoryIdleBot:
             ("clear", "click"),
             ("confirm", "click"),
             ("start_queue", "click"),
-            ("sleepywood", "click"),
+            (self.quest_choice, "click"),  # Quest selection (sleepywood/ludibrium)
             ("pq_button", "click"),
             ("main_menu", "click"),
             ("app_button", "click"),
@@ -467,13 +467,26 @@ class MapleStoryIdleBot:
     
     def _check_wave(self, screen) -> int:
         """Check if any wave indicator is visible. Returns wave number or 0."""
-        if self.matcher.find(screen, "wave_3"):
-            return 3
-        if self.matcher.find(screen, "wave_2"):
-            return 2
-        if self.matcher.find(screen, "wave_1"):
-            return 1
+        # Different wave templates per quest
+        if self.quest_choice == "ludibrium":
+            if self.matcher.find(screen, "wave_33"):
+                return 3
+            if self.matcher.find(screen, "wave_22"):
+                return 2
+            if self.matcher.find(screen, "wave_11"):
+                return 1
+        else:  # sleepywood
+            if self.matcher.find(screen, "wave_3"):
+                return 3
+            if self.matcher.find(screen, "wave_2"):
+                return 2
+            if self.matcher.find(screen, "wave_1"):
+                return 1
         return 0
+    
+    def _get_queue_template(self) -> str:
+        """Get the in_queue template name based on quest choice."""
+        return "in_queue_ludi" if self.quest_choice == "ludibrium" else "in_queue"
     
     def _check_and_click(self, screen, template: str) -> bool:
         """Check for template and click if found."""
@@ -530,7 +543,7 @@ class MapleStoryIdleBot:
                 self._log(f"Queue: {int(elapsed)}s / {self.queue_timeout}s")
         
         # Check if still in queue
-        if self.matcher.find(screen, "in_queue"):
+        if self.matcher.find(screen, self._get_queue_template()):
             return
         
         # Check if PQ started (wave visible)
@@ -571,15 +584,14 @@ class MapleStoryIdleBot:
             self.matcher.find(screen, "loading_screen2") or
             self.matcher.find(screen, "loading_screen3") or
             self.matcher.find(screen, "loading_screen4") or
-            self.matcher.find(screen, "loading_screen5") or
-            self.matcher.find(screen, "checking_player_info")):
+            self.matcher.find(screen, "loading_screen5")):
             self._log("Loading...")
             self._activity()  # Loading is progress
             time.sleep(3)  # Wait 3 seconds before next check
             return
         
         # In queue - track it
-        if self.matcher.find(screen, "in_queue"):
+        if self.matcher.find(screen, self._get_queue_template()):
             if not self.in_queue:
                 self._log("Now in queue!")
                 self.in_queue = True
