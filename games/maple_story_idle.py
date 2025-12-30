@@ -42,7 +42,10 @@ class MapleStoryIdleBot:
     - confirm: OK/Confirm (PRIORITY!)
     - loading_screen, loading_screen2, loading_screen3, loading_screen4, loading_screen5: Game loading
     - wave_1, wave_2, wave_3: In PQ (Sleepywood waves)
+    - wave_11, wave_22, wave_33: In PQ (Ludibrium waves)
     - clear: PQ complete indicator (triggers PQ finish)
+    - red_alert: Boss red attack indicator (wave 3 only) - triggers immediate double-jump
+    - jump: Jump button for avoiding attacks
     """
     
     POSITIONS = {
@@ -101,9 +104,9 @@ class MapleStoryIdleBot:
         self.max_consecutive_timeouts = config.get("max-queue-timeouts", 5)  # Restart after 5 consecutive timeouts
         
         # Track time since last PQ entry (force restart if too long)
-        # Progressive timeout: 5min → 10min → 15min (cap)
+        # Progressive timeout: 7.5min → 15min (cap)
         self.last_pq_entry_time: Optional[datetime] = None
-        self.pq_timeout_levels = [300, 600, 900]  # 5min, 10min, 15min
+        self.pq_timeout_levels = [450, 900]  # 7.5min, 15min
         self.current_pq_timeout_level = 0  # Index into pq_timeout_levels
         
         # Random actions (jump during PQ)
@@ -162,7 +165,7 @@ class MapleStoryIdleBot:
             return False
         
         # Check if too long without entering a PQ - needs hard reset
-        # Progressive timeout: 5min → 10min → 15min (cap)
+        # Progressive timeout: 7.5min → 15min (cap)
         if self.last_pq_entry_time:
             current_timeout = self.pq_timeout_levels[self.current_pq_timeout_level]
             time_without_pq = (datetime.now() - self.last_pq_entry_time).total_seconds()
@@ -310,7 +313,7 @@ class MapleStoryIdleBot:
         self.consecutive_queue_timeouts = 0
         self.last_pq_entry_time = datetime.now()
         
-        # Increase timeout level: 5min → 10min → 15min (cap)
+        # Increase timeout level: 7.5min → 15min (cap)
         if self.current_pq_timeout_level < len(self.pq_timeout_levels) - 1:
             self.current_pq_timeout_level += 1
         next_timeout = self.pq_timeout_levels[self.current_pq_timeout_level]
@@ -403,6 +406,15 @@ class MapleStoryIdleBot:
         
         # === IN PQ MODE: Only look for waves and clear ===
         if self.in_pq:
+            # Being in PQ and actively monitoring = valid activity (prevents false stuck detection)
+            self._activity()
+            
+            # HIGHEST PRIORITY in wave 3: Check for red alert (boss attack)
+            # Must check continuously during wave 3 - can appear anytime!
+            if self.current_wave == 3:
+                self._check_red_alert(screen)
+                # Don't return - continue checking but with fast loop
+            
             # Check for CLEAR screen first (PQ complete!)
             if self.matcher.find(screen, "clear"):
                 self._log("PQ finished!")
@@ -411,28 +423,26 @@ class MapleStoryIdleBot:
                 self.pq_runs += 1
                 self.consecutive_queue_timeouts = 0  # Reset on successful PQ
                 self._log(f"=== PQ #{self.pq_runs} Complete! ===")
-                self._activity()  # Meaningful event
                 time.sleep(1)
                 return
             
-            # Check wave indicators
+            # Check wave indicators (they only appear briefly at wave start!)
+            # current_wave stays sticky - only updates when NEW wave indicator is seen
             wave = self._check_wave(screen)
-            if wave > 0:
-                if wave != self.current_wave:
-                    self._log(f"Wave {wave}")
-                    self._activity()  # Meaningful event
+            if wave > 0 and wave != self.current_wave:
+                self._log(f"Wave {wave}")
                 self.current_wave = wave
-                
-                # Try to jump during PQ (if random_actions enabled)
-                self._try_jump(screen)
-                
-                time.sleep(3)  # Each wave takes ~5s, slow down detection
-                return
             
-            # No wave/clear detected, wait quietly (transition/animation)
-            # Still try to jump during transitions
+            # Wave 3: Check for red alert (boss attack can come anytime)
+            if self.current_wave == 3:
+                self._check_red_alert(screen)
+            
+            # Try to jump during PQ (if random_actions enabled)
             self._try_jump(screen)
-            time.sleep(1)
+            
+            # Fast loop during PQ to catch brief wave indicators (0.5s)
+            # Wave indicators only appear for a few seconds at wave start!
+            time.sleep(0.5)
             return
         
         # === NOT IN PQ: Normal detection flow ===
@@ -519,6 +529,38 @@ class MapleStoryIdleBot:
             self.input.tap_center(match)
             self.last_jump_time = datetime.now()
     
+    def _check_red_alert(self, screen) -> bool:
+        """
+        Check for red alert (boss red attack) during wave 3.
+        Only active during wave 3 (sleepywood) or wave 33 (ludibrium).
+        If detected, immediately double-jump to avoid the attack.
+        Returns True if red alert was detected and jumped.
+        """
+        # Only check during wave 3
+        if self.current_wave != 3:
+            return False
+        
+        # Check for red_alert template
+        red_alert = self.matcher.find(screen, "red_alert")
+        if not red_alert:
+            return False
+        
+        # RED ALERT DETECTED! Quick double-jump!
+        self._log("!!! RED ALERT - JUMPING !!!")
+        
+        # Find jump button and double-tap immediately
+        jump = self.matcher.find(screen, "jump")
+        if jump:
+            # Quick double-tap for double-jump
+            self.input.tap_center(jump)
+            time.sleep(0.05)  # Very short delay for faster response
+            self.input.tap_center(jump)
+            self.last_jump_time = datetime.now()  # Update jump timer
+            return True
+        else:
+            self._log("Jump button not found!")
+            return False
+    
     def _handle_queue(self, screen):
         """Handle being in queue."""
         # Check timeout
@@ -579,7 +621,7 @@ class MapleStoryIdleBot:
     def _detect_and_act(self, screen):
         """Detect where we are and take action."""
         
-        # Loading screen - wait
+        # Loading screen - wait (but check frequently to catch wave indicators!)
         if (self.matcher.find(screen, "loading_screen") or
             self.matcher.find(screen, "loading_screen2") or
             self.matcher.find(screen, "loading_screen3") or
@@ -587,7 +629,7 @@ class MapleStoryIdleBot:
             self.matcher.find(screen, "loading_screen5")):
             self._log("Loading...")
             self._activity()  # Loading is progress
-            time.sleep(3)  # Wait 3 seconds before next check
+            time.sleep(1)  # Check every 1 second to catch wave transition
             return
         
         # In queue - track it
@@ -647,10 +689,10 @@ class MapleStoryIdleBot:
                 self.queue_start_time = datetime.now()
             return
         
-        # Nothing recognized - tap center (slow down to avoid spam)
+        # Nothing recognized - tap center (check again soon in case wave appears)
         self._log("Unknown screen, tapping...")
         self.input.tap(*self.POSITIONS["center"])
-        time.sleep(5)  # Wait 5 seconds before next attempt
+        time.sleep(2)  # Check again in 2 seconds to catch wave transitions
     
     def get_stats(self) -> Dict[str, Any]:
         return {
