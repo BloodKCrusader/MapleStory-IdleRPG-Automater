@@ -44,6 +44,7 @@ class MapleStoryIdleBot:
     - wave_1, wave_2, wave_3: In PQ (Sleepywood waves)
     - wave_11, wave_22, wave_33: In PQ (Ludibrium waves)
     - clear: PQ complete indicator (triggers PQ finish)
+    - failed: PQ failed mid-run indicator (triggers recovery)
     - red_alert: Boss red attack indicator (wave 3 only) - triggers immediate double-jump
     - jump: Jump button for avoiding attacks
     """
@@ -414,6 +415,39 @@ class MapleStoryIdleBot:
             if self.current_wave == 3:
                 self._check_red_alert(screen)
                 # Don't return - continue checking but with fast loop
+            
+            # Check for FAILED screen (PQ failed mid-run!)
+            if self.matcher.find(screen, "failed"):
+                self._log("!!! PQ FAILED - Recovering !!!")
+                self.in_pq = False
+                self.current_wave = 0
+                self._activity()
+                # Click center to dismiss failed screen
+                self.input.tap(*self.POSITIONS["center"])
+                time.sleep(1.5)
+                # Try to click start_queue if visible, otherwise keep clicking center
+                new_screen = self.screen.capture(use_cache=False)
+                if new_screen is not None:
+                    if self._check_and_click(new_screen, "start_queue"):
+                        self._log("Restarting queue after failure")
+                        self.in_queue = True
+                        self.queue_start_time = datetime.now()
+                    else:
+                        # Try clicking center again to progress
+                        self.input.tap(*self.POSITIONS["center"])
+                time.sleep(1)
+                return
+            
+            # Check if start_queue is visible while in PQ - means we failed and fail screen passed
+            if self._check_and_click(screen, "start_queue"):
+                self._log("!!! PQ FAILED (detected via start_queue) - Restarting queue !!!")
+                self.in_pq = False
+                self.current_wave = 0
+                self._activity()
+                self.in_queue = True
+                self.queue_start_time = datetime.now()
+                time.sleep(1)
+                return
             
             # Check for CLEAR screen first (PQ complete!)
             if self.matcher.find(screen, "clear"):
