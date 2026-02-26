@@ -14,6 +14,7 @@ CURRENT TEMPLATES:
 
 OPTIONAL (for better detection):
   [ ] ludibrium.png     - Ludibrium quest option
+  [ ] orbis.png         - Orbis quest option
   [ ] in_pq.png         - Inside PQ battle indicator
   [ ] pq_complete.png   - Victory/completion screen
   [ ] victory.png       - Alternative victory indicator
@@ -31,7 +32,7 @@ BOT FLOW
    - Clicks it to open PQ selection
 
 3. SELECTING_QUEST
-   - Looks for: sleepywood (or ludibrium)
+   - Looks for: sleepywood, ludibrium, or orbis
    - Clicks to select quest
 
 4. CLICKING_START
